@@ -28,12 +28,7 @@ object CredentialUtils {
             val encoder = Base64.getEncoder()
             logger.info("Start to get the CertEnterprise($certId)")
             val result = CertsResourceApi().get(certId, encoder.encodeToString(pair.publicKey))
-            if (result.status != 200 || result.data == null) {
-                logger.error("Fail to get the CertEnterprise($certId) because of ${result.message}")
-                throw ClientException(result.message!!)
-            }
-
-            val iosCert = result.data!!
+            val iosCert = result.data
             logger.info("Fetch CertEnterprise successfully: " +
                 "mobileProvisionFileName=${iosCert.mobileProvisionFileName}" +
                 "mobileProvisionSha1=${iosCert.mobileProvisionSha1}")

@@ -179,7 +179,7 @@
                             </descriptorRefs>
                             <archive>
                                 <manifest>
-                                    <mainClass>com.tencent.bk.devops.atom.IosSignLocalAtom</mainClass>
+                                    <mainClass>com.tencent.bk.devops.atom.AtomRunner</mainClass>
                                 </manifest>
                             </archive>
                         </configuration>
