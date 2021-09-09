@@ -3,7 +3,7 @@
 build/
 target/
 out/
-zip/
+release/
 reports/
 *.iml
 .DS_Store
