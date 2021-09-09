@@ -1,11 +1,11 @@
 {
-  "atomCode": "ios-sign-local",
+  "atomCode": "iosSignLocal",
   "execution": {
-    "packagePath": "plugin-demo-java-jar-with-dependencies.jar",
+    "packagePath": "ios-sign-local-jar-with-dependencies.jar",
     "language": "java",
     "minimumVersion": "1.8",
     "demands": [],
-    "target": "$bk_java_path -jar plugin-demo-java-jar-with-dependencies.jar"
+    "target": "$bk_java_path -jar ios-sign-local-jar-with-dependencies.jar"
   },
   "inputGroups": [
     {
@@ -86,12 +86,12 @@
       "type": "vuex-input",
       "default": "",
       "desc": "打开系统的 Keychain Access.app 后，双击证书文件查看其中的SHA-1编码",
-      "groupName": "archiveConfig",
+      "groupName": "normalConfig",
       "required": false
     },
     "profileStorage": {
       "label": "描述文件指定方式",
-      "default": "ticket",
+      "default": "local",
       "placeholder": "选择签名时拉取的描述文件如何获取",
       "type": "enum-input",
       "desc": "",
@@ -130,8 +130,8 @@
         "searchable": true,
         "multiple": false,
         "url": "/ticket/api/user/certs/projects/{projectId}/hasPermissionList?certType=enterprise&permission=USE",
-        "paramId": "optionId",
-        "paramName": "optionName"
+        "paramId": "certId",
+        "paramName": "certId"
       },
       "required": true,
       "disabled": false,
@@ -143,7 +143,7 @@
       "default": "",
       "placeholder": "",
       "type": "vuex-input",
-      "desc": "选择描述文件",
+      "desc": "ipa文件的相对路径，例如：res1/*.ipa,res2/*.ipa",
       "groupName": "mobileprovisionConfig",
       "rely": {
         "operation": "AND",
@@ -154,10 +154,7 @@
           }
         ]
       },
-      "required": true,
-      "disabled": false,
-      "hidden": false,
-      "isSensitive": false
+      "required": true
     },
     "appexListInTicket": {
       "label": "扩展应用列表（凭据服务）",
@@ -196,8 +193,8 @@
               {
                 "id": "value1",
                 "label": "对应描述文件",
-                "paramId": "optionId",
-                "paramName": "optionName",
+                "paramId": "certId",
+                "paramName": "certId",
                 "type": "select",
                 "listType": "url",
                 "isMultiple": false,

@@ -8,7 +8,6 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.google.common.base.Preconditions
 import com.google.common.base.Strings
 import com.tencent.bk.devops.atom.common.Status
-import com.tencent.bk.devops.atom.exception.AtomException
 import com.tencent.bk.devops.atom.pojo.ParamMap
 import com.tencent.bk.devops.atom.pojo.AppexSignInfo
 import com.tencent.bk.devops.atom.pojo.ArtifactData
@@ -16,11 +15,12 @@ import com.tencent.bk.devops.atom.pojo.AtomResult
 import com.tencent.bk.devops.atom.pojo.IpaInfoPlist
 import com.tencent.bk.devops.atom.pojo.IpaSignInfo
 import com.tencent.bk.devops.atom.pojo.MobileProvisionInfo
-import com.tencent.bk.devops.atom.pojo.SignAtomParam
+import com.tencent.bk.devops.atom.pojo.SignLocalAtomParam
 import com.tencent.bk.devops.atom.pojo.StringData
 import com.tencent.bk.devops.atom.spi.AtomService
 import com.tencent.bk.devops.atom.spi.TaskAtom
 import com.tencent.bk.devops.atom.utils.CommandLineUtils
+import com.tencent.bk.devops.atom.utils.CredentialUtils
 import com.tencent.bk.devops.atom.utils.FileMatcher
 import com.tencent.bk.devops.atom.utils.FileUtil
 import com.tencent.bk.devops.atom.utils.SignUtils
@@ -37,15 +37,21 @@ import java.io.IOException
 import java.util.ArrayList
 import java.util.regex.Pattern
 
-@AtomService(paramClass = SignAtomParam::class)
-class IosCompanySignAtom : TaskAtom<SignAtomParam> {
+@AtomService(paramClass = SignLocalAtomParam::class)
+class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
+
+    companion object {
+        private val logger = LoggerFactory.getLogger(IosSignLocalAtom::class.java)
+        private const val KEYCHAIN_ACCESS_GROUPS_KEY = "keychain-access-groups"
+        private const val MP_TEMP_FILE = ".mp"
+    }
 
     /**
      * 执行主入口
      *
      * @param atomContext 插件上下文
      */
-    override fun execute(atomContext: AtomContext<SignAtomParam>) {
+    override fun execute(atomContext: AtomContext<SignLocalAtomParam>) {
 
         val param = atomContext.param
         val result = atomContext.result
@@ -123,7 +129,7 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
      * @param param 请求参数
      * @param result 结果
      */
-    private fun checkParam(param: SignAtomParam, result: AtomResult) {
+    private fun checkParam(param: SignLocalAtomParam, result: AtomResult) {
         // 参数检查
         try {
             // 参数检查
@@ -191,7 +197,7 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
     }
 
     //必须在 checkParam 后调用
-    private fun getAppexSign(param: SignAtomParam): List<AppexSignInfo>? {
+    private fun getAppexSign(param: SignLocalAtomParam): List<AppexSignInfo>? {
         val pList = param.appexListResultMap
         if (pList == null || pList.isEmpty()) {
             return null
@@ -207,7 +213,7 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
     }
 
     //必须在 checkParam 后调用
-    private fun getReplaceMap(param: SignAtomParam): Map<String, String>? {
+    private fun getReplaceMap(param: SignLocalAtomParam): Map<String, String>? {
         val paramMap = param.replaceKeyArrayList
         if (paramMap == null || paramMap.isEmpty()) {
             return null
@@ -227,7 +233,7 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
      * @param param 请求参数
      */
     @Throws(IOException::class)
-    private fun getIpaSignInfo(param: SignAtomParam): IpaSignInfo {
+    private fun getIpaSignInfo(param: SignLocalAtomParam): IpaSignInfo {
 
         val userId = param.pipelineStartUserName
 
@@ -254,7 +260,7 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
         val buildNum = param.pipelineBuildNum.toInt()
 
         // 主描述文件ID
-        val localStorage = param.profileType == "local"
+        val localStorage = param.profileStorage == "local"
 
         val replaceBundleId = param.replaceBundleId == true
 
@@ -278,7 +284,9 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
         val mobileProvisionInfoMap = if (localStorage) {
             loadMobileProvisionOnLocal(param, appexSignInfo)
         } else {
-            throw AtomException("暂时不支持Ticket获取")
+            val mobileProvisionDir = File(param.bkWorkspace + File.separator + MP_TEMP_FILE)
+            mobileProvisionDir.mkdirs()
+            downloadMobileProvisionFromTicket(param, appexSignInfo, mobileProvisionDir)
         }
 
         return IpaSignInfo(
@@ -364,31 +372,24 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
         }
     }
 
-//    private fun downloadMobileProvision(
-//        mobileProvisionDir: File,
-//        ipaSignInfo: IpaSignInfo
-//    ): Map<String, MobileProvisionInfo> {
-//        val mobileProvisionMap = mutableMapOf<String, MobileProvisionInfo>()
-//        if (ipaSignInfo.mobileProvisionId != null) {
-//            val mpFile = mobileProvisionService.downloadMobileProvision(
-//                mobileProvisionDir = mobileProvisionDir,
-//                projectId = ipaSignInfo.projectId,
-//                mobileProvisionId = ipaSignInfo.mobileProvisionId!!
-//            )
-//            mobileProvisionMap[MAIN_APP_FILENAME] = parseMobileProvision(mpFile)
-//        }
-//        ipaSignInfo.appexSignInfo?.forEach {
-//            val mpFile = mobileProvisionService.downloadMobileProvision(
-//                mobileProvisionDir = mobileProvisionDir,
-//                projectId = ipaSignInfo.projectId,
-//                mobileProvisionId = it.mobileProvisionId
-//            )
-//            mobileProvisionMap[it.appexName] = parseMobileProvision(mpFile)
-//        }
-//        return mobileProvisionMap
-//    }
+    private fun downloadMobileProvisionFromTicket(
+        param: SignLocalAtomParam,
+        appexSignInfo: List<AppexSignInfo>?,
+        mobileProvisionDir: File
+    ): Map<String, MobileProvisionInfo> {
+        val mobileProvisionMap = mutableMapOf<String, MobileProvisionInfo>()
+        if (!param.mainProfileInTicket.isNullOrBlank()) {
+            val mpFile = CredentialUtils.getEnterpriseCertFile(param.mainProfileInTicket.toString(), mobileProvisionDir)
+            mobileProvisionMap[MAIN_APP_FILENAME] = parseMobileProvision(mpFile)
+        }
+        appexSignInfo?.forEach {
+            val mpFile = CredentialUtils.getEnterpriseCertFile(it.mobileProvisionId, mobileProvisionDir)
+            mobileProvisionMap[it.appexName] = parseMobileProvision(mpFile)
+        }
+        return mobileProvisionMap
+    }
 
-    private fun loadMobileProvisionOnLocal(param: SignAtomParam, appexSignInfo: List<AppexSignInfo>?): Map<String, MobileProvisionInfo> {
+    private fun loadMobileProvisionOnLocal(param: SignLocalAtomParam, appexSignInfo: List<AppexSignInfo>?): Map<String, MobileProvisionInfo> {
         val mobileProvisionMap = mutableMapOf<String, MobileProvisionInfo>()
         if (!param.mainProfileOnLocal.isNullOrBlank()) {
             val mpFile = File(param.mainProfileOnLocal!!)
@@ -643,11 +644,5 @@ class IosCompanySignAtom : TaskAtom<SignAtomParam> {
                 }
             }
         }
-    }
-
-    companion object {
-        private val logger = LoggerFactory.getLogger(IosCompanySignAtom::class.java)
-        private val TEAM_IDENTIFIER_KEY = "com.apple.developer.team-identifier"
-        private val KEYCHAIN_ACCESS_GROUPS_KEY = "keychain-access-groups"
     }
 }

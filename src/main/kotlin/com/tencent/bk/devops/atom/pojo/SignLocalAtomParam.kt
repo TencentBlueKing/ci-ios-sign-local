@@ -5,7 +5,7 @@ import lombok.EqualsAndHashCode
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-class SignAtomParam : AtomBaseParam() {
+class SignLocalAtomParam : AtomBaseParam() {
     var ipaPath: String? = null
     var profileType: String? = null
     var certId: String? = null

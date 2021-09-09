@@ -8,7 +8,7 @@ on:
       - '.gitignore'
 
 env:
-  FILENAME: plugin-demo-java
+  FILENAME: ios-sign-local
   ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 jobs:
   # This workflow contains a single job called "build"
