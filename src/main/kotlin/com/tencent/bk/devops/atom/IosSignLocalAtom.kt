@@ -20,7 +20,7 @@ import com.tencent.bk.devops.atom.pojo.StringData
 import com.tencent.bk.devops.atom.spi.AtomService
 import com.tencent.bk.devops.atom.spi.TaskAtom
 import com.tencent.bk.devops.atom.utils.CommandLineUtils
-import com.tencent.bk.devops.atom.utils.CredentialUtils
+import com.tencent.bk.devops.atom.utils.CertUtils
 import com.tencent.bk.devops.atom.utils.FileMatcher
 import com.tencent.bk.devops.atom.utils.FileUtil
 import com.tencent.bk.devops.atom.utils.SignUtils
@@ -156,7 +156,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             }
 
             logger.info("Profile type：" + param.profileType)
-            val appexStr = param.appexListOnLocal
+            val appexStr = if (param.profileStorage == "local") param.appexListOnLocal else param.appexListInTicket
 
             param.appexListResultMap = if (appexStr.isNullOrBlank() || param.profileType == "general" || param.profileType == "single") null
             else JsonUtil.fromJson(appexStr, object : TypeReference<ArrayList<ParamMap>?>() {})
@@ -252,10 +252,8 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         val buildId = param.pipelineBuildId
         val taskId = param.pipelineTaskId
         val buildNum = param.pipelineBuildNum.toInt()
-
-        // 主描述文件ID
+        val wildcard = param.profileType == "general"
         val localStorage = param.profileStorage == "local"
-
         val replaceBundleId = param.replaceBundleId == true
 
         // 组装ul数组
@@ -287,6 +285,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             userId = userId,
             fileSize = null,
             md5 = null,
+            wildcard = wildcard,
             certId = certId,
             archiveType = archiveType,
             projectId = projectId,
@@ -338,7 +337,11 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             logger.warn("[unzip] finished: ${ipaUnzipDir.canonicalPath}")
 
             // 签名操作
-            val signFinished = resignIpaPackage(ipaUnzipDir, ipaSignInfo, ipaSignInfo.mobileProvisionInfoMap)
+            val signFinished = if (ipaSignInfo.wildcard) {
+                resignIpaPackageWildcard(ipaUnzipDir, ipaSignInfo, ipaSignInfo.mobileProvisionInfoMap[MAIN_APP_FILENAME])
+            } else {
+                resignIpaPackage(ipaUnzipDir, ipaSignInfo, ipaSignInfo.mobileProvisionInfoMap)
+            }
             if (!signFinished) {
                 logger.error("[sign] sign ipa failed, please check the config!")
                 throw Exception("IPA包签名失败")
@@ -376,11 +379,11 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
     ): Map<String, MobileProvisionInfo> {
         val mobileProvisionMap = mutableMapOf<String, MobileProvisionInfo>()
         if (!param.mainProfileInTicket.isNullOrBlank()) {
-            val mpFile = CredentialUtils.getEnterpriseCertFile(param.mainProfileInTicket.toString(), mobileProvisionDir)
+            val mpFile = CertUtils.getEnterpriseCertFile(param.mainProfileInTicket.toString(), mobileProvisionDir)
             mobileProvisionMap[MAIN_APP_FILENAME] = parseMobileProvision(mpFile)
         }
         appexSignInfo?.forEach {
-            val mpFile = CredentialUtils.getEnterpriseCertFile(it.mobileProvisionId, mobileProvisionDir)
+            val mpFile = CertUtils.getEnterpriseCertFile(it.mobileProvisionId, mobileProvisionDir)
             mobileProvisionMap[it.appexName] = parseMobileProvision(mpFile)
         }
         return mobileProvisionMap

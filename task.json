@@ -53,6 +53,10 @@
         {
           "value": "multi",
           "label": "多描述文件（含appex拓展）"
+        },
+        {
+          "value": "general",
+          "label": "通配符描述文件"
         }
       ],
       "required": true,

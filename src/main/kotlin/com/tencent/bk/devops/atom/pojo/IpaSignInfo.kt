@@ -1,7 +1,5 @@
 package com.tencent.bk.devops.atom.pojo
 
-import java.io.File
-
 data class IpaSignInfo(
 
     var projectId: String,
@@ -9,6 +7,8 @@ data class IpaSignInfo(
     var pipelineId: String,
 
     var buildId: String,
+
+    var wildcard: Boolean,
 
     var certId: String,
 
