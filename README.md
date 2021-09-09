@@ -1,147 +1,58 @@
-# 使用java开发插件示例
+# iOS重签名插件本地版
 
-可以按照如下步骤一一开发插件，修改配置后体验插件开发流程
+可以按照如下步骤今天流水线插件上线和macOS环境的配置
 
-### Step 1. 登录bkci插件市场-插件工作台初始化插件
+### Step 1. macOS环境准备工作
 
-- 登录插件工作台
-- 新增插件时，系统将初始化插件的基本信息
+- 打开macOS自带的证书管理软件keychain（钥匙串访问）
 
+![钥匙串访问打开方式](docs/keychain.png)
 
+- 将用于重签名的p12文件导入进证书列表，如果出现证书不受信任问题可以先导入证书文件 cer/Apple Common Certificate.cer
 
-### Step 2. 代码库根目录下添加bkci插件配置文件：task.json
+![导入并信任证书](docs/import.png)
 
-task.json配置规则详见：[插件配置规范](https://github.com/ci-plugins/ci-plugins-wiki/blob/master/specification/plugin_config.md)
-
-task.json简单示例如下：
-
-- 必填项：
-
-1.  修改atomCode为你的插件标识（初始化插件时填写的英文标识）
-2.  修改执行配置execution.packagePath为你的插件执行包相对于打的zip包中的位置，execution.target为你的插件启动命令
-3.  修改输入输出字段定义
-
-- 非必填项：
-
-1.  若调起执行前需安装依赖则无需填写执行配置execution.demands
-
-```
-{
-  "atomCode": "demo",
-  "execution": {
-    "packagePath": "demo-jar-with-dependencies.jar",
-    "language": "java",
-    "minimumVersion": "1.8",
-    "demands": [],
-    "target": "java -jar demo-jar-with-dependencies.jar"
-  },
-  "input": {
-    "desc": {
-      "label": "描述",
-      "default": "",
-      "placeholder": "请输入描述信息",
-      "type": "vuex-input",
-      "desc": "描述",
-      "required": true,
-      "disabled": false,
-      "hidden": false,
-      "isSensitive": false
-    }
-  },
-  "output": {
-    "testResult": {
-      "description": "升级是否成功",
-      "type": "string",
-      "isSensitive": false
-    }
-  }
-}
-```
+- 双击进入企业证书，获取证书的SHA1值，用于后面的指定证书ID
 
 
 
-### Step 3. 定义继承sdk包中的AtomBaseParam插件基本参数类的插件参数类
+### Step 2. 导入签名构建机并配置流水线
 
-- 参数类需统一加上lombok框架的@Data注解(IDE开发工具需安装lombok插件)，参数类定义的参数类型统一为String格式
+- 在“环境管理”服务中，新增第三方构建机，导入即将用于签名操作的macOS机器
 
-```
-@Data
-@EqualsAndHashCode(callSuper = true)
-public class AtomParam extends AtomBaseParam {
-    /**
-     * 以下请求参数只是示例，具体可以删除修改成你要的参数
-     */
-    private String desc; //描述信息
-}
-```
+![环境管理导入结果](docs/env.png)
 
+- 配置流水线时，选用macOS构建机并选用用于签名的机器
 
+![配置流水线](docs/init.png)
 
-### Step 4. 定义实现sdk包中的TaskAtom接口的插件任务类
+### Step 3. 插件配置选项和对应功能
 
-- 插件任务类必须实现sdk包中的TaskAtom接口
-- 插件任务类必须加上“@AtomService(paramClass = AtomParam.class)”注解才能被sdk识别和执行（paramClass对应的值为定义的参数类文件名）
+#### 基础配置
 
-```
-@AtomService(paramClass = AtomParam.class)
-public class DemoAtom implements TaskAtom<AtomParam> {
+![基础配置](docs/base.png)
 
-    private final static Logger logger = LoggerFactory.getLogger(DemoAtom.class);
+- ipa文件路径：填写需要进行重签的ipa包路径，支持通配符、相对路径
+- 是否进行bundleID替换：如果选择替换则将以描述文件内的bundleID作为签名后的包bundleID
+- 证书ID：从keychain中复制的SHA1值
+- 描述文件指定方式：支持本地文件或凭据服务中上传的证书文件
+- UL域名：即Universal Link功能配置的跳转链接前缀
+- 钥匙串访问组：需要在描述文件中主动写入的访问组
 
-    /**
-     * 执行主入口
-     * @param atomContext 插件上下文
-     */
-    @Override
-    public void execute(AtomContext<AtomParam> atomContext) {
-        // 1.1 拿到请求参数
-        AtomParam param = atomContext.getParam();
-        logger.info("the param is :{}", JsonUtil.toJson(param));
-        // 1.2 拿到初始化好的返回结果对象
-        AtomResult result = atomContext.getResult();
-        // 2. 校验参数失败直接返回
-        checkParam(param, result);
-        if (result.getStatus() != Status.success) {
-            return;
-        }
-        // 3. 模拟处理插件业务逻辑
-        logger.info("the desc is :{}", param.getDesc()); //打印描述信息
-        // 4. 输出参数，如果有的话
-        // 输出参数是一个Map,Key是参数名， value是值对象
-        Map<String, DataField> data = result.getData();
-        // 假设这个是输出参数的内容
-        StringData testResult = new StringData("hello");
-        // 设置一个名称为testResult的出参
-        data.put("testResult", testResult);
-        logger.info("the testResult is :{}", JsonUtil.toJson(testResult));
-        // 结束。
-    }
+#### 描述文件配置
 
-    /**
-     * 检查参数
-     * @param param  请求参数
-     * @param result 结果
-     */
-    private void checkParam(AtomParam param, AtomResult result) {
-        // 参数检查
-        if (StringUtils.isBlank(param.getDesc())) {
-            result.setStatus(Status.failure);// 状态设置为失败
-            result.setMessage("描述不能为空!"); // 失败信息回传给插件执行框架会打印出结果
-        }
+![描述文件配置](docs/mpconfig.png)
 
-        /*
-         其他比如判空等要自己业务检测处理，否则后面执行可能会抛出异常，状态将会是 Status.error
-         这种属于插件处理不到位，算是bug行为，需要插件的开发去定位
-          */
-    }
+- 主描述文件：最外层主app对应的描述文件（必填）
+- 拓展应用描述文件：当有内部拓展应用时，选择Plugins目录下appex分别对应的描述文件
 
-}
-```
+#### 其他配置
 
+![其他配置](docs/others.png)
 
+- Info.plist内的特殊值替换配置：可以自定义替换plist中的值，例如有watch app时，可以利用该配置替换相关Bundle值
+- 重签名IPA包文件名后缀：自定义产物的后缀，用于多个版本重签时的区分
 
-### Step 5. 配置TaskAtom接口的spi实现类
+### Step 4. 重签后的产物下载
 
-1. 在 src/main/resources/ 下建立 /META-INF/services 目录， 新增一个以接口命名的文件 com.tencent.bk.devops.atom.spi.TaskAtom
-2. 文件里面的内容是定义的实现spi接口的插件任务类，如：com.tencent.bk.devops.atom.task.DemoAtom
-
+- 插件直接

@@ -139,7 +139,7 @@
       "isSensitive": false
     },
     "mainProfileOnLocal": {
-      "label": "主描述文件（本地文件）",
+      "label": "主描述文件路径（本地文件）",
       "default": "",
       "placeholder": "",
       "type": "vuex-input",
@@ -157,7 +157,7 @@
       "required": true
     },
     "appexListInTicket": {
-      "label": "扩展应用列表（凭据服务）",
+      "label": "扩展应用列表于对应描述文件（凭据服务）",
       "type": "dynamic-parameter",
       "required": true,
       "desc": "扩展应用列表",
@@ -209,7 +209,7 @@
       }
     },
     "appexListOnLocal": {
-      "label": "扩展应用列表（本地文件）",
+      "label": "扩展应用列表与对应描述文件路径（本地文件）",
       "type": "dynamic-parameter",
       "required": true,
       "desc": "扩展应用列表",

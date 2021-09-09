@@ -14,8 +14,6 @@ data class IpaSignInfo(
 
     var userId: String = "",
 
-//    var wildcard: Boolean = true,
-
     var fileSize: Long? = null,
 
     var md5: String? = null,

@@ -43,6 +43,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
     companion object {
         private val logger = LoggerFactory.getLogger(IosSignLocalAtom::class.java)
         private const val KEYCHAIN_ACCESS_GROUPS_KEY = "keychain-access-groups"
+        private const val SIGN_TEMP_DIR = ".sign_tmp"
         private const val MP_TEMP_FILE = ".mp"
     }
 
@@ -116,7 +117,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             }
         }
         val resultFilenameList = StringBuilder()
-        ipaResuleFiles.forEachIndexed() { index, file ->
+        ipaResuleFiles.forEachIndexed { index, file ->
             if (index == 0) resultFilenameList.append(file.name)
             else resultFilenameList.append(",${file.name}")
         }
@@ -197,7 +198,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
     }
 
     //必须在 checkParam 后调用
-    private fun getAppexSign(param: SignLocalAtomParam): List<AppexSignInfo>? {
+    private fun getAppexSignInfo(param: SignLocalAtomParam): List<AppexSignInfo>? {
         val pList = param.appexListResultMap
         if (pList == null || pList.isEmpty()) {
             return null
@@ -205,7 +206,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         val sList = mutableListOf<AppexSignInfo>()
         pList.forEach { appex ->
             val kvs = appex.values ?: return@forEach
-            val signInfo = AppexSignInfo(kvs[0].value, kvs[1].value)
+            val signInfo = AppexSignInfo(kvs[0].value.removeSuffix(".appex"), kvs[1].value)
             logger.info("AppexSignInfo: $signInfo")
             sList.add(signInfo)
         }
@@ -236,13 +237,6 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
     private fun getIpaSignInfo(param: SignLocalAtomParam): IpaSignInfo {
 
         val userId = param.pipelineStartUserName
-
-
-        // 是否使用通配方式
-//        var wildcard = false
-//        if (param.profileType == "general") {
-//            wildcard = true
-//        }
 
         // 使用两种不同证书的判断
         val certId = param.certId!!
@@ -280,7 +274,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         val replaceKeyList = getReplaceMap(param)
 
         // 组装拓展Info数组
-        val appexSignInfo = getAppexSign(param)
+        val appexSignInfo = getAppexSignInfo(param)
         val mobileProvisionInfoMap = if (localStorage) {
             loadMobileProvisionOnLocal(param, appexSignInfo)
         } else {
@@ -291,7 +285,6 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
 
         return IpaSignInfo(
             userId = userId,
-//            wildcard = wildcard,
             fileSize = null,
             md5 = null,
             certId = certId,
@@ -332,11 +325,12 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             logger.error("Filename [${ipaFile.name}] is contain Chinese, please check!")
             return null
         }
+        val signTmpDir = getSignTmpDir(workspace)
         try {
             // 准备描述文件和ipa解压后的目录
-            val ipaUnzipDir = getIpaUnzipDir(workspace)
+            val ipaUnzipDir = getIpaUnzipDir(signTmpDir)
             FileUtil.mkdirs(ipaUnzipDir)
-            val mobileProvisionDir = getMobileProvisionDir(workspace)
+            val mobileProvisionDir = getMobileProvisionDir(signTmpDir)
             FileUtil.mkdirs(mobileProvisionDir)
 
             // 解压IPA包
@@ -353,7 +347,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
 
             // 压缩目录
             val uploadFileName = getResultIpaFilename(ipaFile, ipaSignInfo.resultSuffix)
-            val signedIpaFile = SignUtils.zipIpaFile(ipaUnzipDir, ipaUnzipDir.parent + File.separator + uploadFileName)
+            val signedIpaFile = SignUtils.zipIpaFile(ipaUnzipDir, workspace.absolutePath + File.separator + uploadFileName)
             if (signedIpaFile == null) {
                 logger.error("[zip] zip to ipa[$uploadFileName] file failed.")
                 throw Exception("IPA文件生成失败")
@@ -369,6 +363,9 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             result.message = "Load sign response with error: ${e.message}"
             logger.info("Load sign response with error: ${e.message}")
             return null
+        } finally {
+            logger.info("Finish sign and clean temp dir: ${signTmpDir.absolutePath}")
+            signTmpDir.deleteRecursively()
         }
     }
 
@@ -608,18 +605,18 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         return null
     }
 
-    private fun getIpaUnzipDir(workspace: File): File {
-        return File("${getIpaTmpDir(workspace)}.unzipDir")
+    private fun getIpaUnzipDir(signTmpDir: File): File {
+        return File("$signTmpDir.unzipDir")
     }
 
-    private fun getIpaTmpDir(workspace: File): File {
-        val dir = File(workspace, UUIDUtil.generate())
+    private fun getSignTmpDir(workspace: File): File {
+        val dir = File(workspace, "${SIGN_TEMP_DIR}_${UUIDUtil.generate()}")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
 
-    private fun getMobileProvisionDir(workspace: File): File {
-        return File("${getIpaTmpDir(workspace)}.mobileProvisionDir")
+    private fun getMobileProvisionDir(signTmpDir: File): File {
+        return File("$signTmpDir.mobileProvisionDir")
     }
 
     private fun getResultIpaFilename(file: File, suffix: String?): String {
