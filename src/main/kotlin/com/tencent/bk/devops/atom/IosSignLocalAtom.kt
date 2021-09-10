@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.type.TypeReference
 import com.google.common.base.Preconditions
 import com.google.common.base.Strings
 import com.tencent.bk.devops.atom.common.Status
+import com.tencent.bk.devops.atom.exception.AtomException
 import com.tencent.bk.devops.atom.pojo.ParamMap
 import com.tencent.bk.devops.atom.pojo.AppexSignInfo
 import com.tencent.bk.devops.atom.pojo.ArtifactData
@@ -191,7 +192,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
                     return
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: AtomException) {
             result.status = Status.failure
             result.message = e.localizedMessage
         }
@@ -344,7 +345,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             }
             if (!signFinished) {
                 logger.error("[sign] sign ipa failed, please check the config!")
-                throw Exception("IPA包签名失败")
+                throw AtomException("IPA包签名失败")
             }
             logger.warn("[sign] finished: $signFinished")
 
@@ -353,14 +354,14 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             val signedIpaFile = SignUtils.zipIpaFile(ipaUnzipDir, workspace.absolutePath + File.separator + uploadFileName)
             if (signedIpaFile == null) {
                 logger.error("[zip] zip to ipa[$uploadFileName] file failed.")
-                throw Exception("IPA文件生成失败")
+                throw AtomException("IPA文件生成失败")
             }
             logger.warn("[zip] finished: ${signedIpaFile.canonicalPath}")
 
             // 做归档记录操作
             result.data["resignResultIpa"] = ArtifactData(setOf(signedIpaFile.absolutePath))
             return signedIpaFile
-        } catch (e: Exception) {
+        } catch (e: AtomException) {
             e.printStackTrace()
             result.status = Status.error
             result.message = "Load sign response with error: ${e.message}"
@@ -393,10 +394,16 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         val mobileProvisionMap = mutableMapOf<String, MobileProvisionInfo>()
         if (!param.mainProfileOnLocal.isNullOrBlank()) {
             val mpFile = File(param.mainProfileOnLocal!!)
+            if (!mpFile.exists()) {
+                throw AtomException("主描述文件[${param.mainProfileOnLocal}]没有找到，请检查")
+            }
             mobileProvisionMap[MAIN_APP_FILENAME] = parseMobileProvision(mpFile)
         }
         appexSignInfo?.forEach {
             val mpFile = File(it.mobileProvisionId)
+            if (!mpFile.exists()) {
+                throw AtomException("拓展描述文件[${it.mobileProvisionId}]没有找到，请检查")
+            }
             mobileProvisionMap[it.appexName] = parseMobileProvision(mpFile)
         }
         return mobileProvisionMap
@@ -416,7 +423,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         val appDirs = payloadDir.listFiles { dir, name ->
             dir.extension == "app" || name.endsWith("app")
         }.toList()
-        if (appDirs.isEmpty()) throw Exception("IPA包解析失败")
+        if (appDirs.isEmpty()) throw AtomException("IPA包解析失败")
         val appDir = appDirs.first()
 
         // 检查是否将包内所有app/appex对应的签名信息传入
@@ -425,7 +432,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         allAppsInPackage.forEach { app ->
             if (!mobileProvisionInfoList.keys.contains(app.nameWithoutExtension)) {
                 logger.error("Not found appex <${app.name}> MobileProvisionInfo")
-                throw Exception("缺少${app.name}签名信息，请检查参数")
+                throw AtomException("缺少${app.name}签名信息，请检查参数")
             }
         }
 
@@ -453,13 +460,13 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         wildcardInfo: MobileProvisionInfo?
     ): Boolean {
         if (wildcardInfo == null) {
-            throw Exception("通配符描述文件不存在")
+            throw AtomException("通配符描述文件不存在")
         }
         val payloadDir = File(unzipDir.absolutePath + File.separator + "Payload")
         val appDirs = payloadDir.listFiles { dir, name ->
             dir.extension == "app" || name.endsWith("app")
         }.toList()
-        if (appDirs.isEmpty()) throw Exception("IPA包解析失败")
+        if (appDirs.isEmpty()) throw AtomException("IPA包解析失败")
         val appDir = appDirs.first()
 
         return SignUtils.resignAppWildcard(
@@ -494,11 +501,11 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         // 解析bundleId
         val rootDict = PropertyListParser.parse(plistFile) as NSDictionary
         // entitlement
-        if (!rootDict.containsKey("Entitlements")) throw RuntimeException("no Entitlements find in plist")
+        if (!rootDict.containsKey("Entitlements")) throw AtomException("no Entitlements find in plist")
         val entitlementDict = rootDict.objectForKey("Entitlements") as NSDictionary
         // application-identifier
         if (!entitlementDict.containsKey("application-identifier")) {
-            throw RuntimeException("no Entitlements.application-identifier find in plist")
+            throw AtomException("no Entitlements.application-identifier find in plist")
         }
         val bundleIdString = (entitlementDict.objectForKey("application-identifier") as NSString).toString()
         val bundleId = bundleIdString.substring(bundleIdString.indexOf(".") + 1)
@@ -519,7 +526,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
         unzipDir: File
     ): File {
         return fetchPlistFileInDir(File(unzipDir, "payload"))
-            ?: throw Exception("ipa文件解压并检查签名信息失败")
+            ?: throw AtomException("ipa文件解压并检查签名信息失败")
     }
 
     /*
@@ -533,22 +540,22 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
             val rootDict = PropertyListParser.parse(infoPlist) as NSDictionary
             // 应用包名
             if (!rootDict.containsKey("CFBundleIdentifier")) {
-                throw RuntimeException("no CFBundleIdentifier find in plist")
+                throw AtomException("no CFBundleIdentifier find in plist")
             }
             var parameters = rootDict.objectForKey("CFBundleIdentifier") as NSString
             val bundleIdentifier = parameters.toString()
             // 应用标题
-            if (!rootDict.containsKey("CFBundleName")) throw RuntimeException("no CFBundleName find in plist")
+            if (!rootDict.containsKey("CFBundleName")) throw AtomException("no CFBundleName find in plist")
             parameters = rootDict.objectForKey("CFBundleName") as NSString
             val appTitle = parameters.toString()
             // 应用版本
             if (!rootDict.containsKey("CFBundleShortVersionString")) {
-                throw RuntimeException("no CFBundleShortVersionString find in plist")
+                throw AtomException("no CFBundleShortVersionString find in plist")
             }
             parameters = rootDict.objectForKey("CFBundleShortVersionString") as NSString
             val bundleVersion = parameters.toString()
             // 应用构建版本
-            if (!rootDict.containsKey("CFBundleVersion")) throw RuntimeException("no CFBundleVersion find in plist")
+            if (!rootDict.containsKey("CFBundleVersion")) throw AtomException("no CFBundleVersion find in plist")
             parameters = rootDict.objectForKey("CFBundleVersion") as NSString
             val bundleVersionFull = parameters.toString()
             // scheme
@@ -563,7 +570,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
                     .map { it as NSString }
                     .map { it.toString() }
                     .maxBy { it.length } ?: ""
-            } catch (e: Exception) {
+            } catch (e: AtomException) {
                 ""
             }
             // 应用名称
@@ -574,7 +581,7 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
                     rootDict
                 }
                 nameDictionary.objectForKey("CFBundleDisplayName").toString()
-            } catch (e: Exception) {
+            } catch (e: AtomException) {
                 ""
             }
 
@@ -586,8 +593,8 @@ class IosSignLocalAtom : TaskAtom<SignLocalAtomParam> {
                 scheme = scheme,
                 appName = appName
             )
-        } catch (e: Exception) {
-            throw Exception("解析Info.plist失败: ${e.message}")
+        } catch (e: AtomException) {
+            throw AtomException("解析Info.plist失败: ${e.message}")
         }
     }
 
