@@ -1,28 +1,345 @@
 {
-  "atomCode": "plugin-demo-java",
+  "atomCode": "iosSignLocal",
   "execution": {
-    "packagePath": "plugin-demo-java-jar-with-dependencies.jar",
+    "packagePath": "ios-sign-local-jar-with-dependencies.jar",
     "language": "java",
     "minimumVersion": "1.8",
     "demands": [],
-    "target": "$bk_java_path -jar plugin-demo-java-jar-with-dependencies.jar"
+    "target": "$bk_java_path -jar ios-sign-local-jar-with-dependencies.jar"
   },
+  "inputGroups": [
+    {
+      "name": "normalConfig",
+      "label": "基本配置",
+      "isExpanded": true
+    },
+    {
+      "name": "mobileprovisionConfig",
+      "label": "描述文件配置",
+      "isExpanded": true
+    },
+    {
+      "name": "multiReplaceInfo",
+      "label": "Info.plist特殊值替换配置",
+      "isExpanded": true
+    },
+    {
+      "name": "archiveConfig",
+      "label": "结果文件归档配置",
+      "isExpanded": true
+    }
+  ],
   "input": {
-    "desc": {
-      "label": "描述",
-      "default": "123",
-      "placeholder": "请输入描述信息",
+    "ipaPath": {
+      "label": "ipa文件路径（支持通配符，具体目录、文件名只支持英文字母、数字、中划线、下划线、.）",
+      "placeholder": "请填写ipa文件的相对路径; 支持通配符，但只能匹配1个文件; 多文件可以用英文逗号/分号隔开",
       "type": "vuex-input",
-      "desc": "描述",
+      "desc": "ipa文件的相对路径，例如：res1/*.ipa,res2/*.ipa",
+      "groupName": "normalConfig",
+      "required": true
+    },
+    "profileType": {
+      "label": "描述文件类型",
+      "default": "single",
+      "placeholder": "选择描述文件类型",
+      "type": "enum-input",
+      "desc": "",
+      "groupName": "normalConfig",
+      "list": [
+        {
+          "value": "single",
+          "label": "单描述文件"
+        },
+        {
+          "value": "multi",
+          "label": "多描述文件（含appex拓展）"
+        },
+        {
+          "value": "general",
+          "label": "通配符描述文件"
+        }
+      ],
+      "required": true,
+      "disabled": false,
+      "hidden": false
+    },
+    "replaceBundleId": {
+      "label": "是否进行BundleID替换",
+      "default": true,
+      "placeholder": "选择描述文件类型",
+      "type": "enum-input",
+      "desc": "将plist中的CFBundleIdentifier替换为所选描述文件BundleID",
+      "groupName": "normalConfig",
+      "list": [
+        {
+          "value": true,
+          "label": "替换"
+        },
+        {
+          "value": false,
+          "label": "不替换"
+        }
+      ],
+      "required": true,
+      "disabled": false,
+      "hidden": false
+    },
+    "certId": {
+      "label": "证书ID（P12文件的SHA-1编码）",
+      "placeholder": "可以在macOS构建机打开 Keychain Access.app 查看",
+      "type": "vuex-input",
+      "default": "",
+      "desc": "打开系统的 Keychain Access.app 后，双击证书文件查看其中的SHA-1编码",
+      "groupName": "normalConfig",
+      "required": false
+    },
+    "profileStorage": {
+      "label": "描述文件指定方式",
+      "default": "local",
+      "placeholder": "选择签名时拉取的描述文件如何获取",
+      "type": "enum-input",
+      "desc": "",
+      "groupName": "normalConfig",
+      "list": [
+        {
+          "value": "ticket",
+          "label": "凭据服务"
+        },
+        {
+          "value": "local",
+          "label": "本地文件"
+        }
+      ],
+      "required": true,
+      "disabled": false,
+      "hidden": false
+    },
+    "mainProfileInTicket": {
+      "label": "主描述文件（凭据服务）",
+      "default": "",
+      "placeholder": "",
+      "type": "selector",
+      "desc": "选择描述文件",
+      "groupName": "mobileprovisionConfig",
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "profileStorage",
+            "value": "ticket"
+          }
+        ]
+      },
+      "optionsConf": {
+        "searchable": true,
+        "multiple": false,
+        "url": "/ticket/api/user/certs/projects/{projectId}/hasPermissionList?certType=enterprise&permission=USE",
+        "paramId": "certId",
+        "paramName": "certId"
+      },
       "required": true,
       "disabled": false,
       "hidden": false,
       "isSensitive": false
+    },
+    "mainProfileOnLocal": {
+      "label": "主描述文件路径（本地文件）",
+      "default": "",
+      "placeholder": "",
+      "type": "vuex-input",
+      "desc": "ipa文件的相对路径，例如：res1/*.ipa,res2/*.ipa",
+      "groupName": "mobileprovisionConfig",
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "profileStorage",
+            "value": "local"
+          }
+        ]
+      },
+      "required": true
+    },
+    "appexListInTicket": {
+      "label": "扩展应用列表于对应描述文件（凭据服务）",
+      "type": "dynamic-parameter",
+      "required": true,
+      "desc": "扩展应用列表",
+      "groupName": "mobileprovisionConfig",
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "profileType",
+            "value": "multi"
+          },
+          {
+            "key": "profileStorage",
+            "value": "ticket"
+          }
+        ]
+      },
+      "param": {
+        "paramType": "list",
+        "url": "",
+        "parameters": [
+          {
+            "id": "parameterId",
+            "paramModels": [
+              {
+                "id": "key1",
+                "placeholder": "请填写内部包含的.app或.appex文件名前缀",
+                "label": "应用名称",
+                "type": "input",
+                "disabled": false,
+                "value": ""
+              },
+              {
+                "id": "value1",
+                "label": "对应描述文件",
+                "paramId": "certId",
+                "paramName": "certId",
+                "type": "select",
+                "listType": "url",
+                "isMultiple": false,
+                "list": [],
+                "url": "/ticket/api/user/certs/projects/{projectId}/hasPermissionList?certType=enterprise&permission=USE",
+                "disabled": false,
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "appexListOnLocal": {
+      "label": "扩展应用列表与对应描述文件路径（本地文件）",
+      "type": "dynamic-parameter",
+      "required": true,
+      "desc": "扩展应用列表",
+      "groupName": "mobileprovisionConfig",
+      "rely": {
+        "operation": "AND",
+        "expression": [
+          {
+            "key": "profileType",
+            "value": "multi"
+          },
+          {
+            "key": "profileStorage",
+            "value": "local"
+          }
+        ]
+      },
+      "param": {
+        "paramType": "list",
+        "url": "",
+        "parameters": [
+          {
+            "id": "parameterId",
+            "paramModels": [
+              {
+                "id": "key1",
+                "placeholder": "请填写内部包含的.app或.appex文件名前缀",
+                "label": "应用名称",
+                "type": "input",
+                "disabled": false,
+                "value": ""
+              },
+              {
+                "id": "value1",
+                "placeholder": "请填写内部包含的.app或.appex文件名前缀",
+                "label": "对应描述文件路径",
+                "type": "input",
+                "disabled": false,
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "replaceKeyList": {
+      "label": "Info.plist文件中需特殊替换的值（若不存在则不替换）",
+      "type": "dynamic-parameter",
+      "required": false,
+      "desc": "如果plist中存在key值则替换成所填内容，多层级字段请用'.'隔开\n例如：NSExtension.NSExtensionAttributes.WKAppBundleIdentifier",
+      "groupName": "multiReplaceInfo",
+      "param": {
+        "paramType": "list",
+        "url": "",
+        "parameters": [
+          {
+            "id": "parameterId",
+            "paramModels": [
+              {
+                "id": "key2",
+                "placeholder": "key值",
+                "label": "key值",
+                "type": "input",
+                "disabled": false,
+                "value": ""
+              },
+              {
+                "id": "value2",
+                "placeholder": "value值",
+                "label": "value值",
+                "type": "input",
+                "disabled": false,
+                "value": ""
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "ul": {
+      "label": "UL域名(只填纯域名，如www.qq.com)",
+      "placeholder": "请填写UL的域名，多域名可以用英文分号隔开",
+      "type": "vuex-input",
+      "desc": "",
+      "required": false,
+      "groupName": "normalConfig",
+      "rely" :{
+        "operation": "NOT",
+        "expression": [
+          {
+            "key": "profileTypeIn",
+            "value": "general"
+          }
+        ]
+      }
+    },
+    "keychainAccessGroups": {
+      "label": "钥匙串访问组(keychain-access-group)",
+      "placeholder": "请填写访问组，多个组名可以用英文分号隔开",
+      "type": "vuex-input",
+      "desc": "",
+      "required": false,
+      "groupName": "normalConfig",
+      "rely" :{
+        "operation": "NOT",
+        "expression": [
+          {
+            "key": "profileTypeIn",
+            "value": "general"
+          }
+        ]
+      }
+    },
+    "resultSuffix": {
+      "label": "重签IPA包文件名后缀（只支持英文字母、数字、中划线、下划线、.）",
+      "placeholder": "如：待签包为XXX.ipa，此处填写'_abc'，则产物名为XXX_abc.ipa",
+      "type": "vuex-input",
+      "default": "_enterprise_sign",
+      "desc": "自定义产物文件名后缀，默认为'_enterprise_sign'",
+      "groupName": "archiveConfig",
+      "required": false
     }
   },
   "output": {
-    "testResult": {
-      "description": "升级是否成功",
+    "BK_CI_RESIGN_IPA_FILE_LIST": {
+      "description": "重签名后结果文件名列表（多个以英文逗号隔开）",
       "type": "string",
       "isSensitive": false
     }
